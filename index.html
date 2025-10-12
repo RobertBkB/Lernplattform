@@ -38,7 +38,7 @@
   <script>
     function registrieren() {
   const id = document.getElementById("schueler-id").value.trim();
-  fetch(`https://DEIN-SERVER.de/getKlasse.php?id=${id}`)
+  fetch(`https://github.com/RobertBkB/Lernplattform---backend/tree/main/getKlasse.php?id=${id}`)
     .then(response => response.json())
     .then(data => {
       if (data.klasse) {
@@ -95,3 +95,4 @@
   </script>
 </body>
 </html>
+
