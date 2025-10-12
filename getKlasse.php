@@ -8,7 +8,7 @@ if (!isset($_GET['id'])) {
 }
 
 $id = $_GET['id'];
-$rezepte = json_decode(file_get_contents("rezepte.json"), true);
+$rezepte = json_decode(file_get_contents("Lernplattform---backend/rezepte.json"), true);
 
 foreach ($rezepte as $klasse => $ids) {
     if (in_array($id, $ids)) {
@@ -19,3 +19,4 @@ foreach ($rezepte as $klasse => $ids) {
 
 echo json_encode(["error" => "ID nicht gefunden"]);
 ?>
+
