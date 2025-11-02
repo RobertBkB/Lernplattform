@@ -56,6 +56,8 @@
         <button onclick="ändereZusammensetzung(1)">➡️</button>
       </div>
     </div>
+  </div>
+
   <!-- Kuchendiagramm -->
   <canvas id="kuchen" width="300" height="300"></canvas>
 
@@ -125,63 +127,69 @@
 
 function update() {
   const eutektikum = aktuellesSystem.eutektikum;
- 
-  if (Math.abs(comp - eutektikum.comp) < 2 && Math.abs(temp - eutektikum.temp) < 2) {
-  comp = eutektikum.comp;
-}
-
 
   let solid = 0, liquid = 0;
   let solidComp = comp, liquidComp = comp;
   const liquidusTemp = aktuellesSystem.getLiquidusTemp(comp);
   const solidusTemp = aktuellesSystem.getSolidusTemp(comp);
 
+  let festA = 0, festB = 0, festE = 0;
+
   if (temp > liquidusTemp) {
+    // vollständig flüssig
     liquid = 100;
     solid = 0;
     liquidComp = comp;
     solidComp = 0;
   } else if (temp < solidusTemp) {
+    // vollständig fest
     solid = 100;
     liquid = 0;
-    solidComp = comp < eutektikum.comp ? 0 : comp > eutektikum.comp ? 100 : eutektikum.comp;
+
+    if (comp < eutektikum.comp) {
+      festE = (100 * comp) / eutektikum.comp;
+      festA = 100 - festE;
+      festB = 0;
+    } else if (comp > eutektikum.comp) {
+      festE = (100 * (100 - comp)) / (100 - eutektikum.comp);
+      festB = 100 - festE;
+      festA = 0;
+    } else {
+      festE = 100;
+      festA = 0;
+      festB = 0;
+    }
+
+    solidComp = (festB * 100 + festE * eutektikum.comp) / (festA + festB + festE);
     liquidComp = 0;
   } else {
+    // Zweiphasengebiet: fest + flüssig
     liquid = (temp - solidusTemp) / (liquidusTemp - solidusTemp) * 100;
     solid = 100 - liquid;
 
-    const deltaComp = Math.abs(comp - eutektikum.comp);
-    const liquidCompShift = deltaComp * (liquid / 100);
-    const solidCompShift = deltaComp * (solid / 100);
-
+    // feste Phase ist konstant
     if (comp < eutektikum.comp) {
-      solidComp = solidCompShift;
-      liquidComp = eutektikum.comp - liquidCompShift;
+      solidComp = 0; // reines Pb
     } else if (comp > eutektikum.comp) {
-      solidComp = 100 - solidCompShift;
-      liquidComp = eutektikum.comp + liquidCompShift;
+      solidComp = 100; // reines Sn
     } else {
-      solidComp = eutektikum.comp;
-      liquidComp = eutektikum.comp;
+      solidComp = eutektikum.comp; // eutektisch
     }
+
+    // flüssige Phase liegt auf Liquiduslinie → berechne rückwärts
+    if (comp < eutektikum.comp) {
+      liquidComp = 61.9 * (327 - temp) / (327 - 183);
+    } else {
+      liquidComp = 61.9 + (temp - 183) / (327 - 183) * (100 - 61.9);
+    }
+
+    // keine Festphasenanteile anzeigen im Zweiphasengebiet
+    festA = 0;
+    festB = 0;
+    festE = 0;
   }
 
-  let festA = 0, festB = 0, festE = 0;
-  if (solid === 100) {
-    if (comp < eutektikum.comp) {
-      festA = 100 * (1 - comp / eutektikum.comp);
-      festE = 100 - festA;
-    } else if (comp > eutektikum.comp) {
-      festB = 100 * ((comp - eutektikum.comp) / (100 - eutektikum.comp));
-      festE = 100 - festB;
-    } else {
-      festE = 100;
-    }
-  } else {
-    if (comp < eutektikum.comp) festA = solid;
-    else if (comp > eutektikum.comp) festB = solid;
-  }
-
+  // Relativierung für Kuchendiagramm
   const sumFest = festA + festB + festE;
   let festA_rel = 0, festB_rel = 0, festE_rel = 0;
   if (sumFest > 0) {
@@ -193,6 +201,8 @@ function update() {
   drawDiagram(comp, temp, solid, liquid, solidComp, liquidComp, festA_rel, festB_rel, festE_rel);
   drawPie(solid, liquid, solidComp, liquidComp, festA_rel, festB_rel, festE_rel);
 }
+
+
 
 function drawPie(solid, liquid, solidComp, liquidComp, festA, festB, festE) {
   pieCtx.clearRect(0, 0, pieCanvas.width, pieCanvas.height);
@@ -225,8 +235,7 @@ function drawPie(solid, liquid, solidComp, liquidComp, festA, festB, festE) {
   pieCtx.fillText(`T: ${Math.round(temp)}°C`, centerX, centerY - radius - 10);
   pieCtx.fillText(`C: ${Math.round(comp)}%`, centerX, centerY - radius + 10);
 }
-
-function drawDiagram(comp, temp, solid, liquid, solidComp, liquidComp, festA, festB, festE) {
+function drawDiagram(comp, temp, solid, liquid, solidComp, liquidComp, festA_rel, festB_rel, festE_rel) {
   const yMin = aktuellesSystem.tempMin;
   const yMax = aktuellesSystem.tempMax;
   const yScale = (yMax - yMin) / 300;
@@ -305,11 +314,19 @@ function drawDiagram(comp, temp, solid, liquid, solidComp, liquidComp, festA, fe
   ctx.fillStyle = "#000";
   ctx.font = "12px Arial";
   ctx.fillText(`S ${Math.round(liquid)}% (${aktuellesSystem.elements.A} ${(100 - liquidComp).toFixed(0)}%, ${aktuellesSystem.elements.B} ${liquidComp.toFixed(0)}%)`, x + textOffsetX, y + 15);
-  ctx.fillText(`F ${Math.round(solid)}% (${aktuellesSystem.elements.A} ${festA.toFixed(0)}%, ${aktuellesSystem.elements.B} ${festB.toFixed(0)}%, E ${festE.toFixed(0)}%)`, x + textOffsetX, y + 30);
+ if (solid === 100) {
+  ctx.fillText(`F ${Math.round(solid)}% (${aktuellesSystem.elements.A} ${festA_rel.toFixed(0)}%, ${aktuellesSystem.elements.B} ${festB_rel.toFixed(0)}%, E ${festE_rel.toFixed(0)}%)`, x + textOffsetX, y + 30);
+} else {
+  ctx.fillText(`F ${Math.round(solid)}% (${aktuellesSystem.elements.A} ${(100 - solidComp).toFixed(0)}%, ${aktuellesSystem.elements.B} ${solidComp.toFixed(0)}%)`, x + textOffsetX, y + 30);
+}
+
+  ctx.fillText(`T ${Math.round(temp)}°C`, x + textOffsetX, y + 45);
+  ctx.textAlign = "center";
+ctx.fillText(`Element: ${aktuellesSystem.elements.B}`, canvas.width / 2, 385);
+
   ctx.restore();
 }
    wechselMaterial(); // Initialer Aufruf
   </script>
 </body>
 </html>
-
