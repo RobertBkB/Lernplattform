@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes">
+
+  <title>Zustandsdiagramm mit Punkt A</title>
+  <style>
+    canvas { border: 1px solid #ccc; }
+    .controls { margin-top: 10px; }
+  #temperature {
+  width: 300px; /* wirkt wie Höhe nach Rotation */
+}
+input[type="range"] {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  touch-action: none;
+  height: 100%;
+}
+
+
+  </style>
+</head>
+
+<body style="display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 20px;">
+
+  <!-- Pulldown-Menü oben -->
+  <label for="materialSelect"><h1>Kristallgemische</h1></label>
+  <select id="materialSelect" onchange="wechselMaterial()" style="width: 100%; max-width: 400px;">
+    <option value="Pb-Sn">Blei (Pb) – Zinn (Sn)</option>
+    <option value="Al-Si">Aluminium (Al) – Silizium (Si)</option>
+    <option value="Cu-Sb">Kupfer (Cu) – Antimon (Sb)</option>
+  </select>
+
+
+<div style="position: relative; width: 600px; height: 400px;">
+  <canvas id="diagramm" width="600" height="400"></canvas>
+
+  <div style="position: absolute; left: -200px; top: 200px; height: 300px; overflow: hidden; touch-action: none;">
+    <input type="range" id="temperature" step="0.1"
+           style="transform: rotate(270deg); width: 300px;">
+  </div>
+</div>
+
+   
+  <!-- Zusammensetzungsregler -->
+  <div class="controls" style="width: 100%; max-width: 600px;">
+    <label id="compLabel">% <span id="elementB">B</span>: 
+      <input type="range" id="composition" min="0" max="100" value="50" step="1" style="width: 100%;">
+    </label>
+  </div>
+
+  <!-- Kuchendiagramm ganz unten -->
+  <canvas id="kuchen" width="300" height="300"></canvas>
+
+</body>
+
+  <script>
+
+const tempSlider = document.getElementById("temperature");
+
+["touchstart", "touchmove", "touchend"].forEach(evt => {
+  tempSlider.addEventListener(evt, e => {
+    e.preventDefault();
+  }, { passive: false });
+});
+    const materialSysteme = {
+      "Pb-Sn": {
+        name: "Blei-Zinn",
+        elements: { A: "Pb", B: "Sn" },
+        eutektikum: { comp: 61.9, temp: 183 },
+        getLiquidusTemp: (x) => x <= 61.9 ? 327 - (327 - 183) * (x / 61.9) : 183 + (x - 61.9) / (100 - 61.9) * (327 - 183),
+        getSolidusTemp: () => 183,
+        tempMin: 100,
+        tempMax: 350
+      },
+      "Al-Si": {
+        name: "Aluminium-Silizium",
+        elements: { A: "Al", B: "Si" },
+        eutektikum: { comp: 12.6, temp: 577 },
+        getLiquidusTemp: (x) => x <= 12.6 ? 660 - (660 - 577) * (x / 12.6) : 577 + (x - 12.6) / (100 - 12.6) * (660 - 577),
+        getSolidusTemp: () => 577,
+        tempMin: 500,
+        tempMax: 700
+      },
+      "Cu-Sb": {
+        name: "Kupfer-Antimon",
+        elements: { A: "Cu", B: "Sb" },
+        eutektikum: { comp: 90, temp: 630 },
+        getLiquidusTemp: (x) => x <= 90 ? 1085 - (1085 - 630) * (x / 90) : 630 + (x - 90) / (100 - 90) * (1085 - 630),
+        getSolidusTemp: () => 630,
+        tempMin: 500,
+        tempMax: 1150
+      }
+    };
+
+    let aktuellesSystem = materialSysteme["Pb-Sn"];
+    let eutektikum = aktuellesSystem.eutektikum;
+
+    const canvas = document.getElementById("diagramm");
+    const ctx = canvas.getContext("2d");
+    const pieCanvas = document.getElementById("kuchen");
+    const pieCtx = pieCanvas.getContext("2d");
+
+   function aktualisiereTemperaturRegler() {
+  const tempSlider = document.getElementById("temperature");
+  tempSlider.min = aktuellesSystem.tempMin;
+  tempSlider.max = aktuellesSystem.tempMax;
+  tempSlider.value = eutektikum.temp;
+
+  // Höhe ist fix 500px für bessere Präzision
+}
+
+
+
+
+    function wechselMaterial() {
+      const auswahl = document.getElementById("materialSelect").value;
+      aktuellesSystem = materialSysteme[auswahl];
+      eutektikum = aktuellesSystem.eutektikum;
+
+      aktualisiereTemperaturRegler();
+
+      // Elementbezeichnung aktualisieren
+      document.getElementById("elementB").textContent = aktuellesSystem.elements.B;
+
+      update();
+    }
+
+    document.getElementById("composition").addEventListener("input", update);
+    document.getElementById("temperature").addEventListener("input", update);
+    wechselMaterial(); // Initialer Aufruf
+
+function update() {
+  let comp = parseInt(document.getElementById("composition").value);
+  const temp = parseInt(document.getElementById("temperature").value);
+
+  if (Math.abs(comp - eutektikum.comp) < 2) {
+    document.getElementById("composition").value = eutektikum.comp;
+    comp = eutektikum.comp;
+  }
+
+  let solid = 0, liquid = 0;
+  let solidComp = comp, liquidComp = comp;
+  const liquidusTemp = aktuellesSystem.getLiquidusTemp(comp);
+  const solidusTemp = aktuellesSystem.getSolidusTemp(comp);
+
+  if (temp > liquidusTemp) {
+    liquid = 100;
+    solid = 0;
+    liquidComp = comp;
+    solidComp = 0;
+  } else if (temp < solidusTemp) {
+    solid = 100;
+    liquid = 0;
+    solidComp = comp < eutektikum.comp ? 0 : comp > eutektikum.comp ? 100 : eutektikum.comp;
+    liquidComp = 0;
+  } else {
+    liquid = (temp - solidusTemp) / (liquidusTemp - solidusTemp) * 100;
+    solid = 100 - liquid;
+
+    const deltaComp = Math.abs(comp - eutektikum.comp);
+    const liquidCompShift = deltaComp * (liquid / 100);
+    const solidCompShift = deltaComp * (solid / 100);
+
+    if (comp < eutektikum.comp) {
+      solidComp = solidCompShift;
+      liquidComp = eutektikum.comp - liquidCompShift;
+    } else if (comp > eutektikum.comp) {
+      solidComp = 100 - solidCompShift;
+      liquidComp = eutektikum.comp + liquidCompShift;
+    } else {
+      solidComp = eutektikum.comp;
+      liquidComp = eutektikum.comp;
+    }
+  }
+
+  // Feststoffzusammensetzung
+  let festA = 0, festB = 0, festE = 0;
+
+  if (solid === 100) {
+    if (comp < eutektikum.comp) {
+      festA = 100 * (1 - comp / eutektikum.comp);
+      festE = 100 - festA;
+      festB = 0;
+    } else if (comp > eutektikum.comp) {
+      festB = 100 * ((comp - eutektikum.comp) / (100 - eutektikum.comp));
+      festE = 100 - festB;
+      festA = 0;
+    } else {
+      festA = 0;
+      festB = 0;
+      festE = 100;
+    }
+  } else {
+    if (comp < eutektikum.comp) {
+      festA = solid;
+      festB = 0;
+      festE = 0;
+    } else if (comp > eutektikum.comp) {
+      festA = 0;
+      festB = solid;
+      festE = 0;
+    } else {
+      festA = 0;
+      festB = 0;
+      festE = 0;
+    }
+  }
+
+  const sumFest = festA + festB + festE;
+  let festA_rel = 0, festB_rel = 0, festE_rel = 0;
+
+  if (sumFest > 0) {
+    festA_rel = festA / sumFest * 100;
+    festB_rel = festB / sumFest * 100;
+    festE_rel = festE / sumFest * 100;
+  }
+
+  drawDiagram(comp, temp, solid, liquid, solidComp, liquidComp, festA_rel, festB_rel, festE_rel);
+  drawPie(solid, liquid, solidComp, liquidComp, festA_rel, festB_rel, festE_rel);
+}
+
+function drawDiagram(comp, temp, solid, liquid, solidComp, liquidComp, festA, festB, festE) {
+  const yMin = aktuellesSystem.tempMin;
+  const yMax = aktuellesSystem.tempMax;
+  const yScale = (yMax - yMin) / 300;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Achsen
+  ctx.beginPath();
+  ctx.moveTo(50, 350);
+  ctx.lineTo(550, 350);
+  ctx.moveTo(50, 350);
+  ctx.lineTo(50, 50);
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Achsenbeschriftung
+  ctx.font = "12px Arial";
+  ctx.fillStyle = "#000";
+  ctx.textAlign = "center";
+  for (let c = 0; c <= 100; c += 10) {
+    const xPos = 50 + c * 5;
+    ctx.fillText(`${c}%`, xPos, 365);
+    ctx.beginPath();
+    ctx.moveTo(xPos, 350);
+    ctx.lineTo(xPos, 355);
+    ctx.stroke();
+  }
+
+  ctx.textAlign = "right";
+  for (let t = yMin; t <= yMax; t += 50) {
+    const yPos = 350 - (t - yMin) / yScale;
+    ctx.fillText(`${t}°C`, 45, yPos + 4);
+    ctx.beginPath();
+    ctx.moveTo(45, yPos);
+    ctx.lineTo(50, yPos);
+    ctx.stroke();
+  }
+
+  // Liquiduslinie (vollständig)
+  ctx.beginPath();
+  for (let c = 0; c <= 100; c++) {
+    const x = 50 + c * 5;
+    const y = 350 - (aktuellesSystem.getLiquidusTemp(c) - yMin) / yScale;
+    if (c === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = "red";
+  ctx.stroke();
+
+  // Soliduslinie (isotherm)
+  ctx.beginPath();
+  for (let c = 0; c <= 100; c++) {
+    const x = 50 + c * 5;
+    const y = 350 - (aktuellesSystem.getSolidusTemp(c) - yMin) / yScale;
+    if (c === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = "blue";
+  ctx.stroke();
+
+  // Punkt A
+  const x = 50 + comp * 5;
+  const y = 350 - (temp - yMin) / yScale;
+  ctx.beginPath();
+  ctx.arc(x, y, 6, 0, 2 * Math.PI);
+  ctx.fillStyle = "green";
+  ctx.fill();
+  ctx.strokeStyle = "black";
+  ctx.stroke();
+
+  const textOffsetX = x > 450 ? -10 : 10;
+  const textAlign = x > 450 ? "right" : "left";
+  ctx.save();
+  ctx.textAlign = textAlign;
+  ctx.fillStyle = "#000";
+  ctx.font = "12px Arial";
+  ctx.fillText(`S ${Math.round(liquid)}% (${aktuellesSystem.elements.A} ${(100 - liquidComp).toFixed(0)}%, ${aktuellesSystem.elements.B} ${liquidComp.toFixed(0)}%)`, x + textOffsetX, y + 15);
+  ctx.fillText(`F ${Math.round(solid)}% (${aktuellesSystem.elements.A} ${festA.toFixed(0)}%, ${aktuellesSystem.elements.B} ${festB.toFixed(0)}%, E ${festE.toFixed(0)}%)`, x + textOffsetX, y + 30);
+  ctx.restore();
+}
+function drawPie(solidFraction, liquidFraction, solidComp, liquidComp, festA, festB, festE) {
+  pieCtx.clearRect(0, 0, pieCanvas.width, pieCanvas.height);
+  const total = solidFraction + liquidFraction;
+  const solidAngle = (solidFraction / total) * 2 * Math.PI;
+  const liquidAngle = (liquidFraction / total) * 2 * Math.PI;
+
+  // Schmelze
+  pieCtx.beginPath();
+  pieCtx.moveTo(150, 150);
+  pieCtx.arc(150, 150, 100, 0, liquidAngle);
+  pieCtx.fillStyle = "#ff9999";
+  pieCtx.fill();
+
+  // Feststoff
+  pieCtx.beginPath();
+  pieCtx.moveTo(150, 150);
+  pieCtx.arc(150, 150, 100, liquidAngle, liquidAngle + solidAngle);
+  pieCtx.fillStyle = "#9999ff";
+  pieCtx.fill();
+
+  // Text
+  const A = aktuellesSystem.elements.A;
+  const B = aktuellesSystem.elements.B;
+
+  pieCtx.fillStyle = "#000";
+  pieCtx.font = "12px Arial";
+  pieCtx.fillText(`Schmelze: ${Math.round(liquidFraction)}%`, 10, 20);
+  pieCtx.fillText(`${A}: ${(100 - liquidComp).toFixed(1)}%`, 10, 35);
+  pieCtx.fillText(`${B}: ${liquidComp.toFixed(1)}%`, 10, 50);
+  pieCtx.fillText(`Feststoff: ${Math.round(solidFraction)}%`, 10, 80);
+  pieCtx.fillText(`${A}: ${festA.toFixed(1)}%`, 10, 95);
+  pieCtx.fillText(`${B}: ${festB.toFixed(1)}%`, 10, 110);
+  pieCtx.fillText(`E: ${festE.toFixed(1)}%`, 10, 125);
+}
+
+// Event-Listener für Regler
+document.getElementById("composition").addEventListener("input", update);
+document.getElementById("temperature").addEventListener("input", update);
+
+// Initialer Aufruf
+update();
+</script>
+</body>
+</html>
