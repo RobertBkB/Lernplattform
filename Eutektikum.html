@@ -3,73 +3,75 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes">
-
   <title>Zustandsdiagramm mit Punkt A</title>
   <style>
-    canvas { border: 1px solid #ccc; }
-    .controls { margin-top: 10px; }
-  #temperature {
-  width: 300px; /* wirkt wie Höhe nach Rotation */
-}
-input[type="range"] {
-  touch-action: none;
-  -webkit-user-select: none;
-  user-select: none;
-}
-html, body {
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  touch-action: none;
-  height: 100%;
-}
-
-
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+    canvas {
+      border: 1px solid #ccc;
+    }
+    .controls {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+    .button-row {
+      display: flex;
+      gap: 10px;
+    }
+    button {
+      font-size: 1.2em;
+      padding: 10px 15px;
+    }
   </style>
 </head>
+<body>
 
-<body style="display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 20px;">
-
-  <!-- Pulldown-Menü oben -->
-  <label for="materialSelect"><h1>Kristallgemische</h1></label>
+  <h1>Kristallgemische</h1>
   <select id="materialSelect" onchange="wechselMaterial()" style="width: 100%; max-width: 400px;">
-    <option value="Pb-Sn">Blei (Pb) – Zinn (Sn)</option>
-    <option value="Al-Si">Aluminium (Al) – Silizium (Si)</option>
-    <option value="Cu-Sb">Kupfer (Cu) – Antimon (Sb)</option>
+    <option value="Pb-Sn">Blei (Pb) – Zinn (Sn) Eutektikum: 61,9%Pb, 183°C</option>
+    <option value="Al-Si">Aluminium (Al) – Silizium (Si) Eutektikum: 12,6%Al, 577°C</option>
+    <option value="Cu-Sb">Kupfer (Cu) – Antimon (Sb) Eutektikum: 90%Cu, 630°C</option>
   </select>
 
-
-<div style="position: relative; width: 600px; height: 400px;">
+  <!-- Diagramm -->
   <canvas id="diagramm" width="600" height="400"></canvas>
 
-  <div style="position: absolute; left: -200px; top: 200px; height: 300px; overflow: hidden; touch-action: none;">
-    <input type="range" id="temperature" step="0.1"
-           style="transform: rotate(270deg); width: 300px;">
+  <!-- Steuerung -->
+  <div class="controls">
+    <div>
+      <strong>Temperatur</strong>
+      <div class="button-row">
+        <button onclick="ändereTemperatur(5)">⬆️</button>
+        <button onclick="ändereTemperatur(-5)">⬇️</button>
+      </div>
+    </div>
+    <div>
+      <strong>Zusammensetzung</strong>
+      <div class="button-row">
+        <button onclick="ändereZusammensetzung(-1)">⬅️</button>
+        <button onclick="ändereZusammensetzung(1)">➡️</button>
+      </div>
+    </div>
   </div>
-</div>
 
-   
-  <!-- Zusammensetzungsregler -->
-  <div class="controls" style="width: 100%; max-width: 600px;">
-    <label id="compLabel">% <span id="elementB">B</span>: 
-      <input type="range" id="composition" min="0" max="100" value="50" step="1" style="width: 100%;">
-    </label>
-  </div>
-
-  <!-- Kuchendiagramm ganz unten -->
+  <!-- Kuchendiagramm -->
   <canvas id="kuchen" width="300" height="300"></canvas>
 
-</body>
-
   <script>
+    const canvas = document.getElementById("diagramm");
+    const ctx = canvas.getContext("2d");
+    const pieCanvas = document.getElementById("kuchen");
+    const pieCtx = pieCanvas.getContext("2d");
 
-const tempSlider = document.getElementById("temperature");
-
-["touchstart", "touchmove", "touchend"].forEach(evt => {
-  tempSlider.addEventListener(evt, e => {
-    e.preventDefault();
-  }, { passive: false });
-});
     const materialSysteme = {
       "Pb-Sn": {
         name: "Blei-Zinn",
@@ -102,49 +104,39 @@ const tempSlider = document.getElementById("temperature");
 
     let aktuellesSystem = materialSysteme["Pb-Sn"];
     let eutektikum = aktuellesSystem.eutektikum;
+    let comp = eutektikum.comp;
+    let temp = eutektikum.temp;
 
-    const canvas = document.getElementById("diagramm");
-    const ctx = canvas.getContext("2d");
-    const pieCanvas = document.getElementById("kuchen");
-    const pieCtx = pieCanvas.getContext("2d");
-
-   function aktualisiereTemperaturRegler() {
-  const tempSlider = document.getElementById("temperature");
-  tempSlider.min = aktuellesSystem.tempMin;
-  tempSlider.max = aktuellesSystem.tempMax;
-  tempSlider.value = eutektikum.temp;
-
-  // Höhe ist fix 500px für bessere Präzision
-}
-
-
-
-
+    
     function wechselMaterial() {
       const auswahl = document.getElementById("materialSelect").value;
       aktuellesSystem = materialSysteme[auswahl];
       eutektikum = aktuellesSystem.eutektikum;
-
-      aktualisiereTemperaturRegler();
-
-      // Elementbezeichnung aktualisieren
-      document.getElementById("elementB").textContent = aktuellesSystem.elements.B;
-
+      comp = eutektikum.comp;
+      temp = eutektikum.temp;
       update();
     }
 
-    document.getElementById("composition").addEventListener("input", update);
-    document.getElementById("temperature").addEventListener("input", update);
-    wechselMaterial(); // Initialer Aufruf
+    function ändereTemperatur(delta) {
+        temp += delta;
+        temp = Math.max(aktuellesSystem.tempMin, Math.min(aktuellesSystem.tempMax, temp));
+        update(); // ✅ Aufruf der globalen update-Funktion
+    }
+
+    function ändereZusammensetzung(delta) {
+        comp += delta;
+        comp = Math.max(0, Math.min(100, comp));
+    update();
+    }
+
 
 function update() {
-  let comp = parseInt(document.getElementById("composition").value);
-  const temp = parseInt(document.getElementById("temperature").value);
+  const eutektikum = aktuellesSystem.eutektikum;
+ 
+  if (Math.abs(comp - eutektikum.comp) < 2 && Math.abs(temp - eutektikum.temp) < 2) {
+  comp = eutektikum.comp;
+}
 
-  if (Math.abs(comp - eutektikum.comp) < 2) {
-    document.getElementById("composition").value = eutektikum.comp;
-    comp = eutektikum.comp;
-  }
 
   let solid = 0, liquid = 0;
   let solidComp = comp, liquidComp = comp;
@@ -181,42 +173,24 @@ function update() {
     }
   }
 
-  // Feststoffzusammensetzung
   let festA = 0, festB = 0, festE = 0;
-
   if (solid === 100) {
     if (comp < eutektikum.comp) {
       festA = 100 * (1 - comp / eutektikum.comp);
       festE = 100 - festA;
-      festB = 0;
     } else if (comp > eutektikum.comp) {
       festB = 100 * ((comp - eutektikum.comp) / (100 - eutektikum.comp));
       festE = 100 - festB;
-      festA = 0;
     } else {
-      festA = 0;
-      festB = 0;
       festE = 100;
     }
   } else {
-    if (comp < eutektikum.comp) {
-      festA = solid;
-      festB = 0;
-      festE = 0;
-    } else if (comp > eutektikum.comp) {
-      festA = 0;
-      festB = solid;
-      festE = 0;
-    } else {
-      festA = 0;
-      festB = 0;
-      festE = 0;
-    }
+    if (comp < eutektikum.comp) festA = solid;
+    else if (comp > eutektikum.comp) festB = solid;
   }
 
   const sumFest = festA + festB + festE;
   let festA_rel = 0, festB_rel = 0, festE_rel = 0;
-
   if (sumFest > 0) {
     festA_rel = festA / sumFest * 100;
     festB_rel = festB / sumFest * 100;
@@ -225,6 +199,38 @@ function update() {
 
   drawDiagram(comp, temp, solid, liquid, solidComp, liquidComp, festA_rel, festB_rel, festE_rel);
   drawPie(solid, liquid, solidComp, liquidComp, festA_rel, festB_rel, festE_rel);
+}
+
+function drawPie(solid, liquid, solidComp, liquidComp, festA, festB, festE) {
+  pieCtx.clearRect(0, 0, pieCanvas.width, pieCanvas.height);
+  const centerX = pieCanvas.width / 2;
+  const centerY = pieCanvas.height / 2;
+  const radius = 100;
+
+  const segmente = [
+    { label: "Fest A", value: festA, color: "#3498db" },
+    { label: "Fest B", value: festB, color: "#e74c3c" },
+    { label: "Fest E", value: festE, color: "#f1c40f" },
+    { label: "Flüssig", value: liquid, color: "#2ecc71" }
+  ];
+
+  let startAngle = 0;
+  segmente.forEach(seg => {
+    const sliceAngle = (seg.value / 100) * 2 * Math.PI;
+    pieCtx.beginPath();
+    pieCtx.moveTo(centerX, centerY);
+    pieCtx.arc(centerX, centerY, radius, startAngle, startAngle + sliceAngle);
+    pieCtx.closePath();
+    pieCtx.fillStyle = seg.color;
+    pieCtx.fill();
+    startAngle += sliceAngle;
+  });
+
+  pieCtx.fillStyle = "#000";
+  pieCtx.font = "14px Arial";
+  pieCtx.textAlign = "center";
+  pieCtx.fillText(`T: ${Math.round(temp)}°C`, centerX, centerY - radius - 10);
+  pieCtx.fillText(`C: ${Math.round(comp)}%`, centerX, centerY - radius + 10);
 }
 
 function drawDiagram(comp, temp, solid, liquid, solidComp, liquidComp, festA, festB, festE) {
@@ -309,47 +315,7 @@ function drawDiagram(comp, temp, solid, liquid, solidComp, liquidComp, festA, fe
   ctx.fillText(`F ${Math.round(solid)}% (${aktuellesSystem.elements.A} ${festA.toFixed(0)}%, ${aktuellesSystem.elements.B} ${festB.toFixed(0)}%, E ${festE.toFixed(0)}%)`, x + textOffsetX, y + 30);
   ctx.restore();
 }
-function drawPie(solidFraction, liquidFraction, solidComp, liquidComp, festA, festB, festE) {
-  pieCtx.clearRect(0, 0, pieCanvas.width, pieCanvas.height);
-  const total = solidFraction + liquidFraction;
-  const solidAngle = (solidFraction / total) * 2 * Math.PI;
-  const liquidAngle = (liquidFraction / total) * 2 * Math.PI;
-
-  // Schmelze
-  pieCtx.beginPath();
-  pieCtx.moveTo(150, 150);
-  pieCtx.arc(150, 150, 100, 0, liquidAngle);
-  pieCtx.fillStyle = "#ff9999";
-  pieCtx.fill();
-
-  // Feststoff
-  pieCtx.beginPath();
-  pieCtx.moveTo(150, 150);
-  pieCtx.arc(150, 150, 100, liquidAngle, liquidAngle + solidAngle);
-  pieCtx.fillStyle = "#9999ff";
-  pieCtx.fill();
-
-  // Text
-  const A = aktuellesSystem.elements.A;
-  const B = aktuellesSystem.elements.B;
-
-  pieCtx.fillStyle = "#000";
-  pieCtx.font = "12px Arial";
-  pieCtx.fillText(`Schmelze: ${Math.round(liquidFraction)}%`, 10, 20);
-  pieCtx.fillText(`${A}: ${(100 - liquidComp).toFixed(1)}%`, 10, 35);
-  pieCtx.fillText(`${B}: ${liquidComp.toFixed(1)}%`, 10, 50);
-  pieCtx.fillText(`Feststoff: ${Math.round(solidFraction)}%`, 10, 80);
-  pieCtx.fillText(`${A}: ${festA.toFixed(1)}%`, 10, 95);
-  pieCtx.fillText(`${B}: ${festB.toFixed(1)}%`, 10, 110);
-  pieCtx.fillText(`E: ${festE.toFixed(1)}%`, 10, 125);
-}
-
-// Event-Listener für Regler
-document.getElementById("composition").addEventListener("input", update);
-document.getElementById("temperature").addEventListener("input", update);
-
-// Initialer Aufruf
-update();
-</script>
+   wechselMaterial(); // Initialer Aufruf
+  </script>
 </body>
 </html>
